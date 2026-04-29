@@ -29,35 +29,40 @@ public enum TrainerTypes
 /// </summary>
 public class PokemonTrainer
 {
-    /// <summary>
-    /// Name of the trainer
-    /// </summary>
     public string Name { get; set; }
-
-    /// <summary>
-    /// Trainer type
-    /// </summary>
     public TrainerTypes TrainerType { get; set; }
+    public int? Variant { get; set; }
+    public string LoseText { get; set; }
+    public List<string> Items { get; set; } = new();
+    public List<PokemonTeamMember> Team { get; set; } = new();
 
-    /// <summary>
-    /// Trainers pokemon team
-    /// </summary>
-    public List<Pokemon> Team { get; set; }
+    public string DisplayName => Variant.HasValue ? $"{Name} ({Variant})" : Name;
+    public string FullTitle => $"{TrainerType} {DisplayName}".Trim();
 
-    /// <summary>
-    /// Trainer custom sprite
-    /// </summary>
-    public string Sprite { get; set; }
+    public string TrainerSprite => GetTrainerSprite(TrainerType.ToString());
 
-    public PokemonTrainer()
+    private string GetTrainerSprite(string trainerType)
     {
+        return trainerType switch
+        {
+            _ => "images/trainers/default.png"
+        };
     }
+}
 
-    private PokemonTrainer(string name, TrainerTypes type, string sprite, List<Pokemon> team)
-    {
-        Name = name;
-        TrainerType = type;
-        Sprite = sprite;
-        Team = team;
-    }
+public class PokemonTeamMember
+{
+    public string Name { get; set; }
+    public int Level { get; set; }
+    public string Nickname { get; set; }
+    public bool IsShiny { get; set; }
+    public bool IsShadow { get; set; }
+    public string Item { get; set; }
+    public string Ball { get; set; }
+    public string Gender { get; set; }
+    public int AbilityIndex { get; set; }
+    public List<string> Moves { get; set; } = new();
+    public List<int> IVs { get; set; } = new();
+    public Pokemon PokemonData { get; set; }
+    public string Sprite => PokemonData?.Sprites?.FrontDefault;
 }

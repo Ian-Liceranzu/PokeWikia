@@ -1,222 +1,355 @@
 ﻿@page "/routes"
-
 @using PokeApiNet
 @using PokeWikia.Utils.Models
+@using PokeWikia.Pages.Dialogs
 
 @inject HttpClient Http
+@inject IDialogService DialogService
 
-<PageTitle>Routes</PageTitle>
+<MudThemeProvider/>
+<MudDialogProvider/>
+<MudSnackbarProvider/>
 
-<h1>Routes</h1>
+<MudContainer MaxWidth="MaxWidth.Large" Class="my-8">
+    <MudPaper Elevation="3" Class="pa-6">
+        <MudText Typo="Typo.h4" Class="mb-4">Pokémon Routes & Encounters</MudText>
 
-@if (_encounters.Count == 0)
-{
-    <h5>Loading encounters...</h5>
-}
-else
-{
-    <Fields>
-        <Field ColumnSize="ColumnSize.Is6">
-            <FieldLabel>Search for poke:</FieldLabel>
-            <FieldBody>
-                <TextEdit Text="@_pokemonNameFilterValue" TextChanged="@OnCustomFilterValueChanged"/>
-            </FieldBody>
-        </Field>
-    </Fields>
-    <DataGrid @ref="_encounterDataGrid"
-              TItem="Encounters"
-              Data="_encounters"
-              DetailRowStartsVisible="false"
-              CustomFilter="@OnCustomFilter"
-              ShowPager
-              PagerOptions="new DataGridPagerOptions { ButtonSize = Size.Small }">
-        <DataGridColumns>
-            <DataGridCommandColumn/>
-            <DataGridColumn Field="@nameof(Encounters.RouteId)" Caption="RUTA"/>
-        </DataGridColumns>
-        <DetailRowTemplate>
-            @{
-                var encounterList = context.WildEncounters;
-                <DataGrid @ref="_wildEncounterDataGrid"
-                          TItem="WildEncounter"
-                          Data="encounterList"
-                          Sortable="false"
-                          ShowCaptions="true"
-                          DetailRowStartsVisible="false">
-                    <DataGridColumns>
-                        <DataGridCommandColumn/>
-                        <DataGridColumn Field="@nameof(WildEncounter.EncounterType)" Caption="TIPO"/>
-                        <DataGridColumn Field="@nameof(WildEncounter.Frequency)" Caption="FRE."/>
-                    </DataGridColumns>
-                    <DetailRowTemplate Context="encounterContext">
-                        @{
-                            var encounterRatioList = encounterContext.EncounterRatios;
-                            <DataGrid @ref="_encounterRatioDataGrid"
-                                      TItem="EncounterRatio"
-                                      Data="encounterRatioList"
-                                      Sortable="false"
-                                      ShowCaptions="true"
-                                      ReadData="async _ => await LoadEncounterPokemon(encounterRatioList)">
-                                <DataGridColumns>
-                                    <DataGridCommandColumn/>
-                                    <DataGridColumn Field="@nameof(EncounterRatio.Rate)" Caption="RATIO"/>
-                                    <DataGridColumn Field="@nameof(EncounterRatio.Levels)" Caption="LV.">
-                                        <DisplayTemplate Context="levelContext">
-                                            @{
-                                                var levels = (levelContext as EncounterRatio).Levels;
-                                                <label>@levels[0] - @levels[1]</label>
-                                            }
-                                        </DisplayTemplate>
-                                    </DataGridColumn>
-                                    <DataGridColumn Field="@nameof(EncounterRatio.Pokemon)" Caption="NOMBRE">
-                                        <DisplayTemplate Context="nameContext">
-                                            @{
-                                                var name = (nameContext as EncounterRatio).Pokemon.Name;
-                                                <label>@name.ToUpper()</label>
-                                            }
-                                        </DisplayTemplate>
-                                    </DataGridColumn>
-                                    <DataGridColumn Field="@nameof(EncounterRatio.Pokemon)" Caption="IMG">
-                                        <DisplayTemplate Context="pokeContext">
-                                            @{
-                                                var img = (pokeContext as EncounterRatio).Pokemon.Sprites?.FrontDefault;
-                                                <img alt="pokemon img" src="@img"/>
-                                            }
-                                        </DisplayTemplate>
-                                    </DataGridColumn>
-                                </DataGridColumns>
-                            </DataGrid>
+        @if (_encounters.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+                <MudText>Loading encounters...</MudText>
+                <MudProgressLinear Indeterminate="true" Class="mt-2"/>
+            </MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12" sm="6" md="4">
+                    <MudTextField @bind-Value="_pokemonNameFilterValue"
+                                  Label="Search Pokémon"
+                                  Placeholder="Enter Pokémon name..."
+                                  Immediate="true"
+                                  OnKeyUp="@(async _ =>
+                                           {
+                                               await FilterEncounters();
+                                           })"
+                                  Adornment="Adornment.Start"
+                                  AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Clearable="true"
+                                  OnClearClick="@(async () => await ClearFilter())"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"/>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="8" Class="d-flex justify-end">
+                    <MudChipSet T="int" Class="ml-auto">
+                        <MudChip T="int" Color="Color.Primary" Size="Size.Small">
+                            @_encounters.Count
+                        </MudChip>
+                        @if (!string.IsNullOrEmpty(_pokemonNameFilterValue))
+                        {
+                            <MudChip T="string" Color="Color.Secondary" Size="Size.Small"
+                                     OnClose="@(async () => await ClearFilter())">
+                                Pokémon: @_pokemonNameFilterValue
+                            </MudChip>
                         }
-                    </DetailRowTemplate>
-                </DataGrid>
-            }
-        </DetailRowTemplate>
-        <NextPageButtonTemplate>
-            <Icon Name="IconName.StepForward" TextColor="TextColor.Primary"/>
-        </NextPageButtonTemplate>
-        <PreviousPageButtonTemplate>
-            <Icon Name="IconName.StepBackward" TextColor="TextColor.Primary"/>
-        </PreviousPageButtonTemplate>
-        <LastPageButtonTemplate>
-            <Icon Name="IconName.Forward" TextColor="TextColor.Primary"/>
-        </LastPageButtonTemplate>
-        <FirstPageButtonTemplate>
-            <Icon Name="IconName.Backward" TextColor="TextColor.Primary"/>
-        </FirstPageButtonTemplate>
-        <TotalItemsTemplate>
-            <Badge Color="Color.Primary">@context.TotalItems total items</Badge>
-        </TotalItemsTemplate>
-        <TotalItemsShortTemplate>
-            <Badge Color="Color.Primary">@context.TotalItems</Badge>
-        </TotalItemsShortTemplate>
-        <ItemsPerPageTemplate></ItemsPerPageTemplate>
-        <PageSelectorTemplate>
-            <Select TextColor="TextColor.Primary" @bind-SelectedValue="@context.CurrentPage" Size="Size.Small">
-                @for (var i = context.FirstVisiblePage; i <= context.LastVisiblePage; ++i)
-                {
-                    var pageNumber = i;
-                    <SelectItem Value="@pageNumber">@pageNumber</SelectItem>
-                }
-            </Select>
-        </PageSelectorTemplate>
-        <PageSizesTemplate>
-            <Select TextColor="TextColor.Primary" @bind-SelectedValue="@context.CurrentPageSize" Size="Size.Small">
-                @foreach (var curPageSize in context.PageSizes)
-                {
-                    <SelectItem Value="@curPageSize">@curPageSize</SelectItem>
-                }
-            </Select>
-        </PageSizesTemplate>
-    </DataGrid>
-}
+                    </MudChipSet>
+                </MudItem>
+            </MudGrid>
+
+            <MudTable T="Encounters"
+                      Items="@_filteredEncounters"
+                      Dense="@_dense"
+                      Hover="@_hover"
+                      Bordered="@_bordered"
+                      Striped="@_striped"
+                      Elevation="0"
+                      Context="encounter"
+                      Class="mt-4">
+
+                <ToolBarContent>
+                    <MudText Typo="Typo.h6">Encounter List</MudText>
+                    <MudSpacer/>
+                    <MudTooltip Text="Dense Mode">
+                        <MudIconButton Icon="@Icons.Material.Filled.DensitySmall"
+                                       OnClick="@(() => _dense = !_dense)"
+                                       Color="@(_dense ? Color.Primary : Color.Default)"
+                                       Size="Size.Small"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Hover Effect">
+                        <MudIconButton Icon="@Icons.Material.Filled.Mouse"
+                                       OnClick="@(() => _hover = !_hover)"
+                                       Color="@(_hover ? Color.Primary : Color.Default)"
+                                       Size="Size.Small"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Bordered">
+                        <MudIconButton Icon="@Icons.Material.Filled.BorderAll"
+                                       OnClick="@(() => _bordered = !_bordered)"
+                                       Color="@(_bordered ? Color.Primary : Color.Default)"
+                                       Size="Size.Small"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Striped">
+                        <MudIconButton Icon="@Icons.Material.Filled.GridOn"
+                                       OnClick="@(() => _striped = !_striped)"
+                                       Color="@(_striped ? Color.Primary : Color.Default)"
+                                       Size="Size.Small"/>
+                    </MudTooltip>
+                </ToolBarContent>
+
+                <HeaderContent>
+                    <MudTh>Route</MudTh>
+                    <MudTh class="text-center">Total Encounters</MudTh>
+                    <MudTh class="text-center">Pokémon Species</MudTh>
+                    <MudTh class="text-center">Actions</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="Route">
+                        <MudText Typo="Typo.body1" FontWeight="FontWeight.Bold">
+                            @encounter.RouteId?.Trim('[', ']')
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Total Encounters" Class="text-center">
+                        <MudChip T="int" Color="Color.Primary" Size="Size.Small">
+                            @encounter.WildEncounters.Sum(e => e.EncounterRatios.Count)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Pokémon Species" Class="text-center">
+                        <MudChip T="int" Color="Color.Secondary" Size="Size.Small">
+                            @encounter.WildEncounters.SelectMany(e => e.EncounterRatios).Select(r => r.Pokemon.Name).Distinct().Count()
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions" Class="text-center">
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   OnClick="() => OpenRouteDialog(encounter)"
+                                   StartIcon="@Icons.Material.Filled.Visibility">
+                            View Details
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+
+                <PagerContent>
+                    <MudTablePager InfoFormat="@_infoFormat"
+                                   PageSizeOptions="@(new int[] { 10, 20, 50 })"/>
+                </PagerContent>
+            </MudTable>
+        }
+    </MudPaper>
+</MudContainer>
 
 @code {
-
-    DataGrid<Encounters> _encounterDataGrid = new();
-    DataGrid<WildEncounter> _wildEncounterDataGrid = new();
-    DataGrid<EncounterRatio> _encounterRatioDataGrid = new();
-
     PokeApiClient _pokeApiClient = new();
+    List<Encounters> _encounters = [];
+    List<Encounters> _filteredEncounters = [];
+    string _pokemonNameFilterValue = string.Empty;
 
-    List<Encounters> _encounters = new();
-
-    string _pokemonNameFilterValue;
+    // Table settings
+    bool _dense = false;
+    bool _hover = true;
+    bool _bordered = false;
+    bool _striped = true;
+    string _infoFormat = "items per page: {1} ({2})";
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadEncounters();
+        await ApplyFilter();
+        StateHasChanged();
+    }
+
+    private async Task LoadEncounters()
+    {
         var text = await Http.GetStringAsync("sample-data/sample-essentials-encounters.txt");
+        var routes = text.Split("#-------------------------------", StringSplitOptions.RemoveEmptyEntries);
 
-        var routes = text.Split("#-------------------------------");
+        _encounters.Clear();
 
-        Encounters encounter = new() { WildEncounters = new List<WildEncounter>() };
-        WildEncounter wildEncounter = new() { EncounterRatios = new List<EncounterRatio>() };
-        EncounterRatio encounterRatio = new();
-
-        foreach (var r in routes)
+        foreach (var route in routes)
         {
-            var lines = r.Split(Environment.NewLine);
-            foreach (var l in lines)
+            var encounter = ParseEncounterBlock(route);
+            if (encounter != null && encounter.WildEncounters.Any())
             {
-                if (l.StartsWith('#') || string.IsNullOrWhiteSpace(l))
-                {
-                    if (encounter.WildEncounters.Count > 0 || (encounter.WildEncounters.Count == 0 && wildEncounter.EncounterRatios.Count > 0))
-                    {
-                        encounter.WildEncounters.Add(wildEncounter);
-                        wildEncounter = new WildEncounter { EncounterRatios = new List<EncounterRatio>() };
-                        _encounters.Add(encounter);
-                    }
-                    encounter = new Encounters { WildEncounters = new List<WildEncounter>() };
-                }
-                else if (l.StartsWith('['))
-                {
-                    encounter.RouteId = l;
-                }
-                else if (!l.StartsWith(' '))
-                {
-                    if (wildEncounter.EncounterRatios.Count > 0) encounter.WildEncounters.Add(wildEncounter);
-
-                    var typeString = l.Split(',').Length > 1 ? l.Split(',')[0] : l;
-                    var type = Enum.Parse<EncounterTypes>(typeString);
-
-                    wildEncounter = new WildEncounter
-                    {
-                        EncounterType = type,
-                        Frequency = l.Split(',').Length > 1 ? int.Parse(l.Split(',')[1]) : 100,
-                        EncounterRatios = new List<EncounterRatio>()
-                    };
-                }
-                else if (l.StartsWith(' '))
-                {
-                    encounterRatio = new EncounterRatio
-                    {
-                        Rate = int.Parse(l.Split(',')[0]),
-                        Pokemon = new Pokemon { Name = l.Split(',')[1] },
-                        Levels = new[] { int.Parse(l.Split(',')[2]), int.Parse(l.Split(',')[3]) }
-                    };
-
-                    wildEncounter.EncounterRatios.Add(encounterRatio);
-                }
+                _encounters.Add(encounter);
             }
         }
     }
 
-    private Task OnCustomFilterValueChanged(string s)
+    private Encounters ParseEncounterBlock(string block)
     {
-        _pokemonNameFilterValue = s;
-        return _encounterDataGrid.Reload();
+        var lines = block.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        var encounter = new Encounters { WildEncounters = [] };
+        WildEncounter currentWildEncounter = null;
+        bool isInsideWildEncounter = false;
+
+        foreach (var line in lines)
+        {
+            var trimmedLine = line.Trim();
+
+            if (trimmedLine.StartsWith('#'))
+                continue;
+
+            if (trimmedLine.StartsWith('['))
+            {
+                encounter.RouteId = trimmedLine;
+            }
+            else if (!trimmedLine.StartsWith(' ') && !string.IsNullOrWhiteSpace(trimmedLine))
+            {
+                // New wild encounter section
+                if (currentWildEncounter != null && isInsideWildEncounter)
+                {
+                    encounter.WildEncounters.Add(currentWildEncounter);
+                }
+
+                var parts = trimmedLine.Split(',');
+                var typeString = parts.Length > 0 ? parts[0] : trimmedLine;
+                var type = Enum.TryParse<EncounterTypes>(typeString, true, out var parsedType)
+                    ? parsedType
+                    : EncounterTypes.Land;
+
+                currentWildEncounter = new WildEncounter
+                {
+                    EncounterType = type,
+                    Frequency = parts.Length > 1 ? int.Parse(parts[1]) : 100,
+                    EncounterRatios = []
+                };
+                isInsideWildEncounter = true;
+            }
+            else if (trimmedLine.StartsWith(' ') && isInsideWildEncounter)
+            {
+                // Encounter ratio line (starts with space)
+                var parts = trimmedLine.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length >= 4)
+                {
+                    var encounterRatio = new EncounterRatio
+                    {
+                        Rate = int.Parse(parts[0].Trim()),
+                        Pokemon = new Pokemon { Name = parts[1].Trim() },
+                        Levels = [int.Parse(parts[2].Trim()), int.Parse(parts[3].Trim())]
+                    };
+                    currentWildEncounter?.EncounterRatios.Add(encounterRatio);
+                }
+            }
+        }
+
+        // Add the last wild encounter
+        if (currentWildEncounter != null && isInsideWildEncounter)
+        {
+            encounter.WildEncounters.Add(currentWildEncounter);
+        }
+
+        return encounter;
     }
 
-    private bool OnCustomFilter(Encounters encounterData)
+    private async Task FilterEncounters()
     {
-        return string.IsNullOrEmpty(_pokemonNameFilterValue) || encounterData.WildEncounters.Any(w => w.EncounterRatios.Any(r => r.Pokemon.Name.Contains(_pokemonNameFilterValue, StringComparison.CurrentCultureIgnoreCase)));
+        await ApplyFilter();
+        StateHasChanged();
+    }
+
+    private async Task ApplyFilter()
+    {
+        if (string.IsNullOrWhiteSpace(_pokemonNameFilterValue))
+        {
+            _filteredEncounters = _encounters.ToList();
+        }
+        else
+        {
+            _filteredEncounters = _encounters
+                .Where(e => e.WildEncounters
+                    .Any(w => w.EncounterRatios
+                        .Any(r => r.Pokemon.Name.Contains(_pokemonNameFilterValue, StringComparison.OrdinalIgnoreCase))))
+                .ToList();
+        }
+
+        // Load sprites for visible Pokémon
+        await LoadVisiblePokemonSprites();
+    }
+
+    private async Task ClearFilter()
+    {
+        _pokemonNameFilterValue = string.Empty;
+        await ApplyFilter();
+    }
+
+    private async Task LoadVisiblePokemonSprites()
+    {
+        var allPokemon = _filteredEncounters
+            .SelectMany(e => e.WildEncounters)
+            .SelectMany(w => w.EncounterRatios)
+            .Select(r => r.Pokemon)
+            .DistinctBy(p => p.Name)
+            .Where(p => p.Sprites == null)
+            .ToList();
+
+        foreach (var pokemon in allPokemon)
+        {
+            try
+            {
+                var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemon.Name);
+                pokemon.Sprites = pokemonData.Sprites;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading {pokemon.Name}: {ex.Message}");
+            }
+        }
     }
 
     private async Task LoadEncounterPokemon(IEnumerable<EncounterRatio> encounterRatios)
     {
-        foreach (var encounterR in encounterRatios)
+        foreach (var encounterRatio in encounterRatios)
         {
-            encounterR.Pokemon = await _pokeApiClient.GetResourceAsync<Pokemon>(encounterR.Pokemon.Name);
+            if (encounterRatio.Pokemon.Sprites == null)
+            {
+                try
+                {
+                    var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(encounterRatio.Pokemon.Name);
+                    encounterRatio.Pokemon = pokemonData;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error loading {encounterRatio.Pokemon.Name}: {ex.Message}");
+                }
+            }
         }
+    }
+
+    private async void OpenRouteDialog(Encounters encounter)
+    {
+        // Load all Pokémon sprites for this route
+        var allPokemon = encounter.WildEncounters
+            .SelectMany(w => w.EncounterRatios)
+            .Select(r => r.Pokemon)
+            .Where(p => p.Sprites == null)
+            .ToList();
+
+        foreach (var pokemon in allPokemon)
+        {
+            try
+            {
+                var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemon.Name);
+                pokemon.Sprites = pokemonData.Sprites;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error loading {pokemon.Name}: {ex.Message}");
+            }
+        }
+
+        var parameters = new DialogParameters
+        {
+            ["Encounter"] = encounter
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            BackdropClick = false
+        };
+
+        await DialogService.ShowAsync<RouteDialog>("Route Details", parameters, options);
     }
 
 }

@@ -1,157 +1,302 @@
 ﻿@page "/trainers"
-
 @using PokeWikia.Utils.Models
 @using PokeApiNet
+@using PokeWikia.Pages.Dialogs
 
 @inject HttpClient Http
+@inject IDialogService DialogService
 
-<PageTitle>Trainers</PageTitle>
+<MudContainer MaxWidth="MaxWidth.Large" Class="my-8">
+    <MudPaper Elevation="3" Class="pa-6">
+        <MudText Typo="Typo.h4" Class="mb-4">Trainers</MudText>
 
-<h1>Trainers</h1>
+        @if (_trainers.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+                <MudText>Loading trainers...</MudText>
+                <MudProgressLinear Indeterminate="true" Class="mt-2"/>
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable T="PokemonTrainer"
+                      Items="@_trainers"
+                      Dense="@_dense"
+                      Hover="@_hover"
+                      Bordered="@_bordered"
+                      Striped="@_striped"
+                      @ref="_table"
+                      ServerData="@_serverData"
+                      Context="trainer">
 
-@if (_trainers.Count == 0)
-{
-    <h5>Loading trainers...</h5>
-}
-else
-{
-    <DataGrid @ref="_trainerDataGrid"
-              TItem="PokemonTrainer"
-              Data="_trainers"
-              DetailRowStartsVisible="false"
-              ShowPager
-              PagerOptions="new DataGridPagerOptions { ButtonSize = Size.Small }">
-        <DataGridColumns>
-            <DataGridCommandColumn/>
-            <DataGridColumn Field="@nameof(PokemonTrainer.Name)" Caption="NOMBRE"/>
-            <DataGridColumn Field="@nameof(PokemonTrainer.TrainerType)" Caption="TIPO ENTRENADOR"/>
-            <DataGridColumn Field="@nameof(PokemonTrainer.Sprite)" Caption="IMG">
-                <DisplayTemplate>
-                    @{
-                        var img = (context as PokemonTrainer).Sprite;
-                        <img alt="trainer img" src="@img"/>
-                    }
-                </DisplayTemplate>
-            </DataGridColumn>
-        </DataGridColumns>
-        <DetailRowTemplate>
-            @{
-                var team = context.Team;
-                <DataGrid @ref="_pokemonDataGrid"
-                          TItem="Pokemon"
-                          Data="team"
-                          Sortable="false"
-                          ShowCaptions="true"
-                          ReadData="async _ => await LoadTeam(team)">
-                    <DataGridCommandColumn/>
-                    <DataGridColumn Field="@nameof(Pokemon.Name)" Caption="NOMBRE"/>
-                    <DataGridColumn Field="@nameof(Pokemon.Sprites)" Caption="IMG">
-                        <DisplayTemplate Context="pokeContext">
-                            @{
-                                var img = (pokeContext as Pokemon).Sprites?.FrontDefault;
-                                <img alt="pokemon img" src="@img"/>
+                <ToolBarContent>
+                    <MudText Typo="Typo.h6">Trainer List</MudText>
+                    <MudSpacer/>
+                    <MudTooltip Text="Dense Mode">
+                        <MudIconButton Icon="@Icons.Material.Filled.DensitySmall"
+                                       OnClick="@(() => _dense = !_dense)"
+                                       Color="@(_dense ? Color.Primary : Color.Default)"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Hover Effect">
+                        <MudIconButton Icon="@Icons.Material.Filled.Mouse"
+                                       OnClick="@(() => _hover = !_hover)"
+                                       Color="@(_hover ? Color.Primary : Color.Default)"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Bordered">
+                        <MudIconButton Icon="@Icons.Material.Filled.BorderAll"
+                                       OnClick="@(() => _bordered = !_bordered)"
+                                       Color="@(_bordered ? Color.Primary : Color.Default)"/>
+                    </MudTooltip>
+                    <MudTooltip Text="Striped">
+                        <MudIconButton Icon="@Icons.Material.Filled.GridOn"
+                                       OnClick="@(() => _striped = !_striped)"
+                                       Color="@(_striped ? Color.Primary : Color.Default)"/>
+                    </MudTooltip>
+                </ToolBarContent>
+
+                <ColGroup>
+                    <col style="width: 100px;"/>
+                    <col/>
+                    <col/>
+                    <col style="width: 80px;"/>
+                </ColGroup>
+
+                <HeaderContent>
+                    <MudTh>IMG</MudTh>
+                    <MudTh>NOMBRE</MudTh>
+                    <MudTh>TIPO ENTRENADOR</MudTh>
+                    <MudTh class="text-center">EQUIPO</MudTh>
+                </HeaderContent>
+
+                <RowTemplate>
+                    <MudTd DataLabel="IMG">
+                        @if (!string.IsNullOrEmpty(trainer.TrainerSprite))
+                        {
+                            <MudImage Src="@trainer.TrainerSprite"
+                                      Alt="trainer img"
+                                      Style="width: 50px; height: auto;"
+                                      Elevation="2"/>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="NOMBRE">
+                        <MudText>
+                            @trainer.DisplayName
+                            @if (trainer.Variant.HasValue)
+                            {
+                                <MudChip T="int" Size="Size.Small" Color="Color.Secondary" Class="ml-2">V
+                                    @trainer.Variant
+                                </MudChip>
                             }
-                        </DisplayTemplate>
-                    </DataGridColumn>
-                </DataGrid>
-            }
-        </DetailRowTemplate>
-        <NextPageButtonTemplate>
-            <Icon Name="IconName.StepForward" TextColor="TextColor.Primary"/>
-        </NextPageButtonTemplate>
-        <PreviousPageButtonTemplate>
-            <Icon Name="IconName.StepBackward" TextColor="TextColor.Primary"/>
-        </PreviousPageButtonTemplate>
-        <LastPageButtonTemplate>
-            <Icon Name="IconName.Forward" TextColor="TextColor.Primary"/>
-        </LastPageButtonTemplate>
-        <FirstPageButtonTemplate>
-            <Icon Name="IconName.Backward" TextColor="TextColor.Primary"/>
-        </FirstPageButtonTemplate>
-        <TotalItemsTemplate>
-            <Badge Color="Color.Primary">@context.TotalItems total items</Badge>
-        </TotalItemsTemplate>
-        <TotalItemsShortTemplate>
-            <Badge Color="Color.Primary">@context.TotalItems</Badge>
-        </TotalItemsShortTemplate>
-        <ItemsPerPageTemplate></ItemsPerPageTemplate>
-        <PageSelectorTemplate>
-            <Select TextColor="TextColor.Primary" @bind-SelectedValue="@context.CurrentPage" Size="Size.Small">
-                @for (var i = context.FirstVisiblePage; i <= context.LastVisiblePage; ++i)
-                {
-                    var pageNumber = i;
-                    <SelectItem Value="@pageNumber">@pageNumber</SelectItem>
-                }
-            </Select>
-        </PageSelectorTemplate>
-        <PageSizesTemplate>
-            <Select TextColor="TextColor.Primary" @bind-SelectedValue="@context.CurrentPageSize" Size="Size.Small">
-                @foreach (var curPageSize in context.PageSizes)
-                {
-                    <SelectItem Value="@curPageSize">@curPageSize</SelectItem>
-                }
-            </Select>
-        </PageSizesTemplate>
-    </DataGrid>
-}
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="TIPO ENTRENADOR">
+                        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined">
+                            @trainer.TrainerType
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="EQUIPO" Class="text-center">
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Primary"
+                                   OnClick="() => OpenTeamDialog(trainer)">
+                            <MudBadge Content="@trainer.Team.Count" Color="Color.Error" Overlap="true">
+                                <MudIcon Icon="@Icons.Material.Filled.Pets"/>
+                            </MudBadge>
+                        </MudButton>
+                    </MudTd>
+                </RowTemplate>
+
+                <PagerContent>
+                    <MudTablePager InfoFormat="@_infoFormat"/>
+                </PagerContent>
+            </MudTable>
+        }
+    </MudPaper>
+</MudContainer>
 
 @code {
-    DataGrid<PokemonTrainer> _trainerDataGrid = new();
-    DataGrid<Pokemon> _pokemonDataGrid = new();
-
-    /// <summary>
-    /// Client API to call for all pokemon data
-    /// </summary>
+    MudTable<PokemonTrainer> _table;
     PokeApiClient _pokeApiClient = new();
+    List<PokemonTrainer> _trainers = [];
+    List<PokemonTrainer> _pagedData = [];
 
-    /// <summary>
-    /// List with all the pokemon trainers
-    /// </summary>
-    List<PokemonTrainer> _trainers = new();
+    // Table settings
+    bool _dense = false;
+    bool _hover = true;
+    bool _bordered = false;
+    bool _striped = true;
+    string _infoFormat = "items per page: {1} ({2})";
+
+    // Pagination
+    int _totalItems = 0;
+    string _searchString = "";
 
     protected override async Task OnInitializedAsync()
     {
-        var text = await Http.GetStringAsync("sample-data/sample-essentials-trainers.txt");
+        await LoadTrainers();
 
-        var trainers = text.Split("#-------------------------------");
+        // Initialize with first page of data
+        _pagedData = _trainers.Take(10).ToList();
+        _totalItems = _trainers.Count;
+        StateHasChanged();
+    }
 
-        List<Pokemon> team = new();
+    private async Task<TableData<PokemonTrainer>> _serverData(TableState state, CancellationToken cancellationToken)
+    {
+        var filteredData = _trainers.AsQueryable();
 
-        foreach (var t in trainers)
+        // Apply search if needed
+        if (!string.IsNullOrWhiteSpace(_searchString))
         {
-            if (string.IsNullOrWhiteSpace(t)) break;
+            filteredData = filteredData.Where(x =>
+                x.Name.Contains(_searchString, StringComparison.OrdinalIgnoreCase) ||
+                x.TrainerType.ToString().Contains(_searchString, StringComparison.OrdinalIgnoreCase));
+        }
 
-            var lines = t.Split(Environment.NewLine);
+        _totalItems = filteredData.Count();
 
-            var pokes = lines.Where(l => l.StartsWith("Pokemon"));
+        // Apply pagination
+        var data = filteredData
+            .Skip(state.Page * state.PageSize)
+            .Take(state.PageSize)
+            .ToList();
 
-            team.AddRange(pokes.Select(pokeLine => pokeLine.Split('=')[1].Split(',')[0].Trim())
-                .Select(pokeName => new Pokemon { Name = pokeName }));
+        await LoadTeamSprites(data.SelectMany(t => t.Team));
 
-            var line = lines.First(l => l.StartsWith("["));
-            var trainerLine = line.Substring(1, line.Length - 3).Split(',');
+        return new TableData<PokemonTrainer>
+        {
+            Items = data,
+            TotalItems = _totalItems
+        };
+    }
 
-            _trainers.Add(new PokemonTrainer
-            {
-                Name = trainerLine[1],
-                TrainerType = Enum.Parse<TrainerTypes>(trainerLine[0]),
-                Team = team
-            });
+    private async Task LoadTrainers()
+    {
+        var text = await Http.GetStringAsync("sample-data/sample-essentials-trainers.txt");
+        var trainerBlocks = text.Split("#-------------------------------", StringSplitOptions.RemoveEmptyEntries);
 
-            team = new List<Pokemon>();
+        foreach (var block in trainerBlocks)
+        {
+            var trainer = ParseTrainerBlock(block);
+            if (trainer != null)
+                _trainers.Add(trainer);
         }
     }
 
-    ///<summary>
-    /// Loads the sprites for the pokemon team on click
-    /// </summary>
-    private async Task LoadTeam(IEnumerable<Pokemon> team)
+    private PokemonTrainer ParseTrainerBlock(string block)
     {
-        foreach (var poke in team)
+        var lines = block.Split([Environment.NewLine], StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length == 0) return null;
+
+        var trainer = new PokemonTrainer();
+        var currentPokemon = new PokemonTeamMember();
+        var isParsingPokemon = false;
+
+        foreach (var line in lines)
         {
-            var pokeNew = await _pokeApiClient.GetResourceAsync<Pokemon>(poke.Name);
-            poke.Sprites = pokeNew.Sprites;
+            var trimmedLine = line.Trim();
+
+            if (trimmedLine.StartsWith("[") && trimmedLine.EndsWith("]"))
+            {
+                var content = trimmedLine.Substring(1, trimmedLine.Length - 2);
+                var parts = content.Split(',');
+
+                if (Enum.TryParse<TrainerTypes>(parts[0], out var trainerType))
+                    trainer.TrainerType = trainerType;
+
+                trainer.Name = parts[1];
+                if (parts.Length > 2 && int.TryParse(parts[2], out var variant))
+                    trainer.Variant = variant;
+            }
+            else if (trimmedLine.StartsWith("Items ="))
+            {
+                var itemsPart = trimmedLine.Split('=')[1].Trim();
+                trainer.Items = itemsPart.Split(',').Select(i => i.Trim()).ToList();
+            }
+            else if (trimmedLine.StartsWith("LoseText ="))
+            {
+                trainer.LoseText = trimmedLine.Split('=')[1].Trim().Trim('¡', '!');
+            }
+            else if (trimmedLine.StartsWith("Pokemon ="))
+            {
+                if (isParsingPokemon && currentPokemon.Name != null)
+                    trainer.Team.Add(currentPokemon);
+
+                var pokemonPart = trimmedLine.Split('=')[1].Trim();
+                var pokemonParts = pokemonPart.Split(',');
+
+                currentPokemon = new PokemonTeamMember
+                {
+                    Name = pokemonParts[0],
+                    Level = int.Parse(pokemonParts[1])
+                };
+                isParsingPokemon = true;
+            }
+            else if (isParsingPokemon && trimmedLine.Contains("="))
+            {
+                var parts = trimmedLine.Split('=');
+                var key = parts[0].Trim();
+                var value = parts[1].Trim();
+
+                switch (key)
+                {
+                    case "Name": currentPokemon.Nickname = value; break;
+                    case "Gender": currentPokemon.Gender = value; break;
+                    case "Shiny": currentPokemon.IsShiny = value.Equals("yes", StringComparison.OrdinalIgnoreCase); break;
+                    case "Shadow": currentPokemon.IsShadow = value.Equals("yes", StringComparison.OrdinalIgnoreCase); break;
+                    case "Item": currentPokemon.Item = value; break;
+                    case "Ball": currentPokemon.Ball = value; break;
+                    case "AbilityIndex": currentPokemon.AbilityIndex = int.Parse(value); break;
+                    case "Moves": currentPokemon.Moves = value.Split(',').ToList(); break;
+                    case "IV": currentPokemon.IVs = value.Split(',').Select(int.Parse).ToList(); break;
+                }
+            }
         }
+
+        if (currentPokemon.Name != null)
+            trainer.Team.Add(currentPokemon);
+
+        return trainer.Name != null ? trainer : null;
+    }
+
+    private async Task LoadTeamSprites(IEnumerable<PokemonTeamMember> team)
+    {
+        foreach (var poke in team.Where(p => p.PokemonData == null))
+        {
+            try
+            {
+                poke.PokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(poke.Name);
+            }
+            catch
+            {
+                Console.WriteLine($"Could not load data for {poke.Name}");
+            }
+        }
+    }
+
+    private async void OpenTeamDialog(PokemonTrainer trainer)
+    {
+        await LoadTeamSprites(trainer.Team);
+
+        var parameters = new DialogParameters
+        {
+            ["Trainer"] = trainer
+        };
+
+        var options = new DialogOptions
+        {
+            CloseButton = true,
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<TeamDialog>("Team Details", parameters, options);
+    }
+
+    private async Task Search(string searchString)
+    {
+        _searchString = searchString;
+        await _table.ReloadServerData();
+        StateHasChanged();
     }
 
 }

@@ -1,0 +1,157 @@
+﻿@using PokeWikia.Utils.Models
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            @Encounter.RouteId?.Trim('[', ']') - Encounter Details
+        </MudText>
+    </TitleContent>
+
+    <DialogContent>
+        <MudExpansionPanels>
+            @foreach (var wildEncounter in Encounter.WildEncounters)
+            {
+                <MudExpansionPanel Text="@GetEncounterTypeName(wildEncounter.EncounterType)"
+                                   IsInitiallyExpanded="@(wildEncounter == Encounter.WildEncounters.First())">
+                    <TitleContent>
+                        <MudChip T="string" Color="Color.Primary" Size="Size.Small" Class="mr-2">
+                            Frequency: @wildEncounter.Frequency%
+                        </MudChip>
+                        <MudChip T="string" Color="Color.Secondary" Size="Size.Small">
+                            Pokémon: @wildEncounter.EncounterRatios.Count
+                        </MudChip>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudTable T="EncounterRatio"
+                                  Items="@wildEncounter.EncounterRatios"
+                                  Dense="true"
+                                  Hover="true"
+                                  Bordered="true"
+                                  Elevation="0">
+
+                            <HeaderContent>
+                                <MudTh>Sprite</MudTh>
+                                <MudTh>Pokémon</MudTh>
+                                <MudTh>Rate</MudTh>
+                                <MudTh>Level Range</MudTh>
+                            </HeaderContent>
+
+                            <RowTemplate>
+                                <MudTd DataLabel="Sprite">
+                                    @if (context.Pokemon?.Sprites?.FrontDefault != null)
+                                    {
+                                        <MudImage Src="@context.Pokemon.Sprites.FrontDefault"
+                                                  Alt="@context.Pokemon.Name"
+                                                  Style="width: 50px; height: auto;"
+                                                  Elevation="1"/>
+                                    }
+                                    else
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.CatchingPokemon" Color="Color.Default"
+                                                 Size="Size.Medium"/>
+                                    }
+                                </MudTd>
+                                <MudTd DataLabel="Pokémon">
+                                    <MudText Typo="Typo.body1" FontWeight="FontWeight.Bold" Class="text-uppercase">
+                                        @context.Pokemon?.Name
+                                    </MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Rate">
+                                    <MudProgressLinear Value="@(context.Rate)"
+                                                       Color="Color.Success"
+                                                       Class="mt-2"
+                                                       Style="width: 100px;"/>
+                                    <MudText Typo="Typo.caption" Class="mt-1">@context.Rate%</MudText>
+                                </MudTd>
+                                <MudTd DataLabel="Level Range">
+                                    <MudChipSet T="string">
+                                        <MudChip T="string" Color="Color.Info" Size="Size.Small" Variant="Variant.Outlined">
+                                            Lv. @context.Levels[0] - @context.Levels[1]
+                                        </MudChip>
+                                    </MudChipSet>
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
+
+        @* Summary Section *@
+        <MudPaper Elevation="0" Class="mt-4 pa-4" Style="background-color: rgba(0,0,0,0.05); border-radius: 8px;">
+            <MudGrid>
+                <MudItem xs="12" sm="4">
+                    <MudText Typo="Typo.body2" Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.Route" Color="Color.Primary"/>
+                        <br/>
+                        <strong>Total Encounters</strong>
+                        <br/>
+                        @Encounter.WildEncounters.Sum(e => e.EncounterRatios.Count)
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudText Typo="Typo.body2" Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.CatchingPokemon" Color="Color.Secondary"/>
+                        <br/>
+                        <strong>Unique Species</strong>
+                        <br/>
+                        @Encounter.WildEncounters.SelectMany(e => e.EncounterRatios).Select(r => r.Pokemon.Name).Distinct().Count()
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudText Typo="Typo.body2" Class="text-center">
+                        <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success"/>
+                        <br/>
+                        <strong>Max Level</strong>
+                        <br/>
+                        @Encounter.WildEncounters.SelectMany(e => e.EncounterRatios).Max(r => r.Levels[1])
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="Close">
+            Close
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; }
+
+    [Parameter] public Encounters Encounter { get; set; }
+
+    private string GetEncounterTypeName(EncounterTypes type)
+    {
+        return type switch
+        {
+            EncounterTypes.Land => "🌿 Grass Encounters",
+            EncounterTypes.LandMorning => "🌿 Grass Encounters",
+            EncounterTypes.LandNight => "🌿 Grass Encounters",
+            EncounterTypes.Cave => "🪨 Cave Encounters",
+            EncounterTypes.Water => "💧 Water Encounters",
+            EncounterTypes.WaterNight => "💧 Water Encounters",
+            EncounterTypes.OldRod => "🎣 Old Rod",
+            EncounterTypes.GoodRod => "🎣 Good Rod",
+            EncounterTypes.SuperRod => "🎣 Super Rod",
+            EncounterTypes.RockSmash => "🪨 Rock Smash",
+            EncounterTypes.HeadbuttHigh => "🌲 Headbutt",
+            EncounterTypes.HeadbuttLow => "🌲 Headbutt",
+            _ => type.ToString()
+        };
+    }
+
+    private void Close()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Encounter == null)
+            MudDialog.Cancel();
+    }
+
+}

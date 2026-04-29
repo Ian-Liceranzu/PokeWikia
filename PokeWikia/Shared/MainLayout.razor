@@ -1,5 +1,12 @@
 ﻿@inherits LayoutComponentBase
 
+<MudThemeProvider Theme="customTheme" />
+<MudPopoverProvider />
+
+<MudDialogProvider />
+
+<MudSnackbarProvider />
+
 <div class="page">
     <div class="sidebar">
         <NavMenu/>
@@ -11,3 +18,16 @@
         </article>
     </main>
 </div>
+
+@code{
+
+    MudTheme customTheme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#AA53C6",
+            Secondary= "#7053C6"
+        }
+    };
+
+}
