@@ -1,4 +1,5 @@
-﻿@using PokeWikia.Utils.Models
+﻿@using PokeApiNet
+@using PokeWikia.Utils.Models
 
 <MudDialog>
     <TitleContent>
@@ -21,99 +22,124 @@
             </MudAlert>
         }
         
-        <MudTable T="PokemonTeamMember" 
-                  Items="@Trainer.Team"
-                  Dense="true"
-                  Hover="true"
-                  Bordered="true">
-            
-            <HeaderContent>
-                <MudTh>Sprite</MudTh>
-                <MudTh>Pokémon</MudTh>
-                <MudTh>Level</MudTh>
-                <MudTh>Nickname</MudTh>
-                <MudTh>Details</MudTh>
-                <MudTh>Moves</MudTh>
-            </HeaderContent>
-            
-            <RowTemplate>
-                <MudTd DataLabel="Sprite">
-                    @if (!string.IsNullOrEmpty(context.Sprite))
-                    {
-                        <MudImage Src="@context.Sprite" Alt="pokemon img" Style="width: 50px; height: auto;" />
-                    }
-                </MudTd>
-                <MudTd DataLabel="Pokémon">
-                    <MudText>
-                        @context.Name
-                        @if (context.IsShiny)
+        @if (_isLoading)
+        {
+            <MudProgressCircular Indeterminate="true" Size="Size.Large" Class="ma-4" />
+            <MudText Class="text-center">Loading Pokémon data...</MudText>
+        }
+        else
+        {
+            <MudTable T="PokemonTeamMember" 
+                      Items="@Trainer.Team"
+                      Dense="true"
+                      Hover="true"
+                      Bordered="true">
+                
+                <HeaderContent>
+                    <MudTh>Sprite</MudTh>
+                    <MudTh>Pokémon</MudTh>
+                    <MudTh>Level</MudTh>
+                    <MudTh>Nickname</MudTh>
+                    <MudTh>Details</MudTh>
+                    <MudTh>Moves</MudTh>
+                </HeaderContent>
+                
+                <RowTemplate>
+                    <MudTd DataLabel="Sprite">
+                        @if (_spritesLoaded.ContainsKey(context.Name) && _spritesLoaded[context.Name] != null)
                         {
-                            <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Warning" Size="Size.Small" />
+                            <MudImage Src="@_spritesLoaded[context.Name]" 
+                                      Alt="@context.Name" 
+                                      Style="width: 50px; height: auto;" />
                         }
-                        @if (context.IsShadow)
+                        else if (_loadingSprites.Contains(context.Name))
                         {
-                            <MudIcon Icon="@Icons.Material.Filled.DarkMode" Color="Color.Dark" Size="Size.Small" />
+                            <MudProgressCircular Indeterminate="true" Size="Size.Small" />
                         }
-                    </MudText>
-                </MudTd>
-                <MudTd DataLabel="Level">
-                    <MudChip T="string" Color="Color.Primary" Size="Size.Small">Lv. @context.Level</MudChip>
-                </MudTd>
-                <MudTd DataLabel="Nickname">
-                    @if (!string.IsNullOrEmpty(context.Nickname))
-                    {
-                        <MudText Typo="Typo.body2" Italic="true">"@context.Nickname"</MudText>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Details">
-                    <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                        @if (!string.IsNullOrEmpty(context.Gender))
+                        else
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
-                                @(context.Gender == "male" ? "♂" : "♀")
-                            </MudChip>
+                            <MudIcon Icon="@Icons.Material.Filled.CatchingPokemon" 
+                                     Color="Color.Default" 
+                                     Size="Size.Medium"
+                                     Style="cursor: pointer;"
+                                     @onclick="() => LoadSpriteForPokemon(context.Name)" />
+                            <MudTooltip Text="Click to load sprite">
+                                <span></span>
+                            </MudTooltip>
                         }
-                        @if (!string.IsNullOrEmpty(context.Item))
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
-                                @context.Item
-                            </MudChip>
-                        }
-                        @if (!string.IsNullOrEmpty(context.Ball))
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                                @context.Ball
-                            </MudChip>
-                        }
-                        @if (context.IVs.Any())
-                        {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">
-                                <MudTooltip Text="HP/ATK/DEF/SPA/SPD/SPE">
-                                    <span>IVs: @string.Join("/", context.IVs)</span>
-                                </MudTooltip>
-                            </MudChip>
-                        }
-                    </div>
-                </MudTd>
-                <MudTd DataLabel="Moves">
-                    @if (context.Moves.Any())
-                    {
-                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-                            @foreach (var move in context.Moves)
+                    </MudTd>
+                    <MudTd DataLabel="Pokémon">
+                        <MudText>
+                            @context.Name
+                            @if (context.IsShiny)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Filled">
-                                    @move
+                                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Color="Color.Warning" Size="Size.Small" />
+                            }
+                            @if (context.IsShadow)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.DarkMode" Color="Color.Dark" Size="Size.Small" />
+                            }
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Level">
+                        <MudChip T="string" Color="Color.Primary" Size="Size.Small">Lv. @context.Level</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Nickname">
+                        @if (!string.IsNullOrEmpty(context.Nickname))
+                        {
+                            <MudText Typo="Typo.body2" Italic="true">"@context.Nickname"</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Details">
+                        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                            @if (!string.IsNullOrEmpty(context.Gender))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                    @(context.Gender == "male" ? "♂" : "♀")
+                                </MudChip>
+                            }
+                            @if (!string.IsNullOrEmpty(context.Item))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                                    @context.Item
+                                </MudChip>
+                            }
+                            @if (!string.IsNullOrEmpty(context.Ball))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                    @context.Ball
+                                </MudChip>
+                            }
+                            @if (context.IVs.Any())
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined">
+                                    <MudTooltip Text="HP/ATK/DEF/SPA/SPD/SPE">
+                                        <span>IVs: @string.Join("/", context.IVs)</span>
+                                    </MudTooltip>
                                 </MudChip>
                             }
                         </div>
-                    }
-                </MudTd>
-            </RowTemplate>
-        </MudTable>
+                    </MudTd>
+                    <MudTd DataLabel="Moves">
+                        @if (context.Moves.Any())
+                        {
+                            <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+                                @foreach (var move in context.Moves)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Filled">
+                                        @move
+                                    </MudChip>
+                                }
+                            </div>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
     </DialogContent>
     
     <DialogActions>
-        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="MudDialog.Cancel">
+        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="CloseDialog">
             Close
         </MudButton>
     </DialogActions>
@@ -121,14 +147,83 @@
 
 @code {
     [CascadingParameter]
-    IMudDialogInstance  MudDialog { get; set; }
+    IMudDialogInstance MudDialog { get; set; }
     
     [Parameter]
     public PokemonTrainer Trainer { get; set; }
     
-    protected override void OnInitialized()
+    [Parameter]
+    public Func<string, Task<Pokemon>> LoadPokemonSprite { get; set; }
+    
+    [Parameter]
+    public Dictionary<string, Pokemon> PokemonCache { get; set; }
+    
+    private Dictionary<string, string> _spritesLoaded = new();
+    private HashSet<string> _loadingSprites = [];
+    private bool _isLoading = false;
+    
+    protected override async Task OnInitializedAsync()
     {
         if (Trainer == null)
+        {
             MudDialog.Cancel();
+            return;
+        }
+        
+        // Pre-load sprites from cache if available
+        foreach (var pokemon in Trainer.Team)
+        {
+            if (PokemonCache != null && PokemonCache.TryGetValue(pokemon.Name, out var cachedPokemon))
+            {
+                if (cachedPokemon.Sprites?.FrontDefault != null)
+                {
+                    _spritesLoaded[pokemon.Name] = cachedPokemon.Sprites.FrontDefault;
+                }
+            }
+        }
+        
+        await LoadAllSprites();
+    }
+    
+    private async Task LoadSpriteForPokemon(string pokemonName)
+    {
+        if (_spritesLoaded.ContainsKey(pokemonName) || _loadingSprites.Contains(pokemonName))
+            return;
+        
+        _loadingSprites.Add(pokemonName);
+        StateHasChanged();
+        
+        try
+        {
+            var pokemon = await LoadPokemonSprite(pokemonName);
+            if (pokemon.Sprites?.FrontDefault != null)
+            {
+                _spritesLoaded[pokemonName] = pokemon.Sprites.FrontDefault;
+            }
+        }
+        finally
+        {
+            _loadingSprites.Remove(pokemonName);
+            StateHasChanged();
+        }
+    }
+    
+    private async Task LoadAllSprites()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        foreach (var pokemon in Trainer.Team.Where(pokemon => !_spritesLoaded.ContainsKey(pokemon.Name)))
+        {
+            await LoadSpriteForPokemon(pokemon.Name);
+        }
+        
+        _isLoading = false;
+        StateHasChanged();
+    }
+    
+    private void CloseDialog()
+    {
+        MudDialog.Close(DialogResult.Ok(true));
     }
 }

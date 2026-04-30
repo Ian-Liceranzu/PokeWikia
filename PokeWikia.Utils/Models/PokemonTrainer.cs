@@ -33,8 +33,8 @@ public class PokemonTrainer
     public TrainerTypes TrainerType { get; set; }
     public int? Variant { get; set; }
     public string LoseText { get; set; }
-    public List<string> Items { get; set; } = new();
-    public List<PokemonTeamMember> Team { get; set; } = new();
+    public List<string> Items { get; set; } = [];
+    public List<PokemonTeamMember> Team { get; set; } = [];
 
     public string DisplayName => Variant.HasValue ? $"{Name} ({Variant})" : Name;
     public string FullTitle => $"{TrainerType} {DisplayName}".Trim();
@@ -61,8 +61,8 @@ public class PokemonTeamMember
     public string Ball { get; set; }
     public string Gender { get; set; }
     public int AbilityIndex { get; set; }
-    public List<string> Moves { get; set; } = new();
-    public List<int> IVs { get; set; } = new();
+    public List<string> Moves { get; set; } = [];
+    public List<int> IVs { get; set; } = [];
     public Pokemon PokemonData { get; set; }
     public string Sprite => PokemonData?.Sprites?.FrontDefault;
 }

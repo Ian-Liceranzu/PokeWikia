@@ -1,4 +1,5 @@
 ﻿@page "/trainers"
+
 @using PokeWikia.Utils.Models
 @using PokeApiNet
 @using PokeWikia.Pages.Dialogs
@@ -19,39 +20,11 @@
         }
         else
         {
-            <MudTable T="PokemonTrainer"
-                      Items="@_trainers"
-                      Dense="@_dense"
-                      Hover="@_hover"
-                      Bordered="@_bordered"
-                      Striped="@_striped"
-                      @ref="_table"
-                      ServerData="@_serverData"
-                      Context="trainer">
+            <MudTable T="PokemonTrainer" Items="@_trainers" Dense="true" Hover="true" Bordered="false" Striped="true"
+                      @ref="_table" ServerData="@_serverData" Context="trainer">
 
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Trainer List</MudText>
-                    <MudSpacer/>
-                    <MudTooltip Text="Dense Mode">
-                        <MudIconButton Icon="@Icons.Material.Filled.DensitySmall"
-                                       OnClick="@(() => _dense = !_dense)"
-                                       Color="@(_dense ? Color.Primary : Color.Default)"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Hover Effect">
-                        <MudIconButton Icon="@Icons.Material.Filled.Mouse"
-                                       OnClick="@(() => _hover = !_hover)"
-                                       Color="@(_hover ? Color.Primary : Color.Default)"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Bordered">
-                        <MudIconButton Icon="@Icons.Material.Filled.BorderAll"
-                                       OnClick="@(() => _bordered = !_bordered)"
-                                       Color="@(_bordered ? Color.Primary : Color.Default)"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Striped">
-                        <MudIconButton Icon="@Icons.Material.Filled.GridOn"
-                                       OnClick="@(() => _striped = !_striped)"
-                                       Color="@(_striped ? Color.Primary : Color.Default)"/>
-                    </MudTooltip>
                 </ToolBarContent>
 
                 <ColGroup>
@@ -72,10 +45,8 @@
                     <MudTd DataLabel="IMG">
                         @if (!string.IsNullOrEmpty(trainer.TrainerSprite))
                         {
-                            <MudImage Src="@trainer.TrainerSprite"
-                                      Alt="trainer img"
-                                      Style="width: 50px; height: auto;"
-                                      Elevation="2"/>
+                            <MudImage Src="@trainer.TrainerSprite" Alt="trainer img"
+                                      Style="width: 50px; height: auto;"/>
                         }
                     </MudTd>
                     <MudTd DataLabel="NOMBRE">
@@ -106,7 +77,7 @@
                 </RowTemplate>
 
                 <PagerContent>
-                    <MudTablePager InfoFormat="@_infoFormat"/>
+                    <MudTablePager/>
                 </PagerContent>
             </MudTable>
         }
@@ -119,16 +90,12 @@
     List<PokemonTrainer> _trainers = [];
     List<PokemonTrainer> _pagedData = [];
 
-    // Table settings
-    bool _dense = false;
-    bool _hover = true;
-    bool _bordered = false;
-    bool _striped = true;
-    string _infoFormat = "items per page: {1} ({2})";
-
     // Pagination
-    int _totalItems = 0;
+    int _totalItems;
     string _searchString = "";
+
+    // Shared cache for Pokémon sprites
+    private Dictionary<string, Pokemon> _pokemonCache = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -160,7 +127,8 @@
             .Take(state.PageSize)
             .ToList();
 
-        await LoadTeamSprites(data.SelectMany(t => t.Team));
+        // Don't load sprites here anymore - do it on-demand in the dialog
+        // await LoadTeamSprites(data.SelectMany(t => t.Team));
 
         return new TableData<PokemonTrainer>
         {
@@ -258,45 +226,46 @@
         return trainer.Name != null ? trainer : null;
     }
 
-    private async Task LoadTeamSprites(IEnumerable<PokemonTeamMember> team)
+    // Cache-aware sprite loading
+    private async Task<Pokemon> LoadPokemonSprite(string pokemonName)
     {
-        foreach (var poke in team.Where(p => p.PokemonData == null))
+        // Check cache first
+        if (_pokemonCache.TryGetValue(pokemonName, out var sprite))
         {
-            try
-            {
-                poke.PokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(poke.Name);
-            }
-            catch
-            {
-                Console.WriteLine($"Could not load data for {poke.Name}");
-            }
+            return sprite;
+        }
+
+        try
+        {
+            var pokemon = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemonName);
+            _pokemonCache[pokemonName] = pokemon;
+            return pokemon;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading {pokemonName}: {ex.Message}");
+            return new Pokemon { Name = pokemonName };
         }
     }
 
     private async void OpenTeamDialog(PokemonTrainer trainer)
     {
-        await LoadTeamSprites(trainer.Team);
-
         var parameters = new DialogParameters
         {
-            ["Trainer"] = trainer
+            ["Trainer"] = trainer,
+            ["LoadPokemonSprite"] = new Func<string, Task<Pokemon>>(LoadPokemonSprite),
+            ["PokemonCache"] = _pokemonCache
         };
 
         var options = new DialogOptions
         {
             CloseButton = true,
             MaxWidth = MaxWidth.Large,
-            FullWidth = true
+            FullWidth = true,
+            CloseOnEscapeKey = true
         };
 
         await DialogService.ShowAsync<TeamDialog>("Team Details", parameters, options);
-    }
-
-    private async Task Search(string searchString)
-    {
-        _searchString = searchString;
-        await _table.ReloadServerData();
-        StateHasChanged();
     }
 
 }

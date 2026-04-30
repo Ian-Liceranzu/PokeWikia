@@ -28,15 +28,9 @@ public enum EncounterTypes
 /// </summary>
 public class Encounters
 {
-    /// <summary>
-    /// Route name and Id
-    /// </summary>
     public string RouteId { get; set; }
-
-    /// <summary>
-    /// List with the wild encounters contained in a route
-    /// </summary>
-    public List<WildEncounter> WildEncounters { get; set; }
+    public string RouteName { get; set; }  // Add this property
+    public List<WildEncounter> WildEncounters { get; set; } = [];
 }
 
 /// <summary>
@@ -78,5 +72,5 @@ public class EncounterRatio
     /// <summary>
     /// Level interval in which the pokemon appear
     /// </summary>
-    public int[] Levels { get; set; }
+    public List<int> Levels { get; set; }
 }

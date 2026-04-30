@@ -1,14 +1,11 @@
 ﻿@page "/routes"
+
 @using PokeApiNet
-@using PokeWikia.Utils.Models
 @using PokeWikia.Pages.Dialogs
+@using PokeWikia.Utils.Models
 
 @inject HttpClient Http
 @inject IDialogService DialogService
-
-<MudThemeProvider/>
-<MudDialogProvider/>
-<MudSnackbarProvider/>
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="my-8">
     <MudPaper Elevation="3" Class="pa-6">
@@ -25,18 +22,15 @@
         {
             <MudGrid>
                 <MudItem xs="12" sm="6" md="4">
-                    <MudTextField @bind-Value="_pokemonNameFilterValue"
+                    <MudTextField @bind-Value="@_pokemonNameFilterValue"
                                   Label="Search Pokémon"
                                   Placeholder="Enter Pokémon name..."
                                   Immediate="true"
-                                  OnKeyUp="@(async _ =>
-                                           {
-                                               await FilterEncounters();
-                                           })"
                                   Adornment="Adornment.Start"
                                   AdornmentIcon="@Icons.Material.Filled.Search"
                                   Clearable="true"
-                                  OnClearClick="@(async () => await ClearFilter())"
+                                  OnClearButtonClick="@(async () => await ClearFilter())"
+                                  OnKeyDown="@(e => { if (e.Key == "Enter") { ApplyFilter(); } })"
                                   Variant="Variant.Outlined"
                                   FullWidth="true"/>
                 </MudItem>
@@ -56,43 +50,10 @@
                 </MudItem>
             </MudGrid>
 
-            <MudTable T="Encounters"
-                      Items="@_filteredEncounters"
-                      Dense="@_dense"
-                      Hover="@_hover"
-                      Bordered="@_bordered"
-                      Striped="@_striped"
-                      Elevation="0"
-                      Context="encounter"
-                      Class="mt-4">
-
+            <MudTable T="Encounters" Items="@_filteredEncounters" Dense="true" Hover="true" Bordered="false" 
+                      Striped="true" Elevation="0" Context="encounter" Class="mt-4">
                 <ToolBarContent>
                     <MudText Typo="Typo.h6">Encounter List</MudText>
-                    <MudSpacer/>
-                    <MudTooltip Text="Dense Mode">
-                        <MudIconButton Icon="@Icons.Material.Filled.DensitySmall"
-                                       OnClick="@(() => _dense = !_dense)"
-                                       Color="@(_dense ? Color.Primary : Color.Default)"
-                                       Size="Size.Small"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Hover Effect">
-                        <MudIconButton Icon="@Icons.Material.Filled.Mouse"
-                                       OnClick="@(() => _hover = !_hover)"
-                                       Color="@(_hover ? Color.Primary : Color.Default)"
-                                       Size="Size.Small"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Bordered">
-                        <MudIconButton Icon="@Icons.Material.Filled.BorderAll"
-                                       OnClick="@(() => _bordered = !_bordered)"
-                                       Color="@(_bordered ? Color.Primary : Color.Default)"
-                                       Size="Size.Small"/>
-                    </MudTooltip>
-                    <MudTooltip Text="Striped">
-                        <MudIconButton Icon="@Icons.Material.Filled.GridOn"
-                                       OnClick="@(() => _striped = !_striped)"
-                                       Color="@(_striped ? Color.Primary : Color.Default)"
-                                       Size="Size.Small"/>
-                    </MudTooltip>
                 </ToolBarContent>
 
                 <HeaderContent>
@@ -105,7 +66,7 @@
                 <RowTemplate>
                     <MudTd DataLabel="Route">
                         <MudText Typo="Typo.body1" FontWeight="FontWeight.Bold">
-                            @encounter.RouteId?.Trim('[', ']')
+                            @encounter.RouteName (@encounter.RouteId?.Trim('[', ']'))
                         </MudText>
                     </MudTd>
                     <MudTd DataLabel="Total Encounters" Class="text-center">
@@ -119,9 +80,7 @@
                         </MudChip>
                     </MudTd>
                     <MudTd DataLabel="Actions" Class="text-center">
-                        <MudButton Variant="Variant.Text"
-                                   Color="Color.Primary"
-                                   OnClick="() => OpenRouteDialog(encounter)"
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="() => OpenRouteDialog(encounter)"
                                    StartIcon="@Icons.Material.Filled.Visibility">
                             View Details
                         </MudButton>
@@ -129,8 +88,7 @@
                 </RowTemplate>
 
                 <PagerContent>
-                    <MudTablePager InfoFormat="@_infoFormat"
-                                   PageSizeOptions="@(new int[] { 10, 20, 50 })"/>
+                    <MudTablePager PageSizeOptions="@([10, 20, 50])"/>
                 </PagerContent>
             </MudTable>
         }
@@ -143,18 +101,13 @@
     List<Encounters> _filteredEncounters = [];
     string _pokemonNameFilterValue = string.Empty;
 
-    // Table settings
-    bool _dense = false;
-    bool _hover = true;
-    bool _bordered = false;
-    bool _striped = true;
-    string _infoFormat = "items per page: {1} ({2})";
+    // Cache for loaded Pokémon - IMPORTANT for performance
+    private Dictionary<string, Pokemon> _pokemonCache = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadEncounters();
         await ApplyFilter();
-        StateHasChanged();
     }
 
     private async Task LoadEncounters()
@@ -176,63 +129,100 @@
 
     private Encounters ParseEncounterBlock(string block)
     {
-        var lines = block.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         var encounter = new Encounters { WildEncounters = [] };
+        var lines = block.Split([Environment.NewLine, "\n", "\r\n"], StringSplitOptions.RemoveEmptyEntries);
+
         WildEncounter currentWildEncounter = null;
-        bool isInsideWildEncounter = false;
 
-        foreach (var line in lines)
+        foreach (var rawLine in lines)
         {
-            var trimmedLine = line.Trim();
+            var trimmedLine = rawLine.Trim();
 
-            if (trimmedLine.StartsWith('#'))
+            if (string.IsNullOrWhiteSpace(trimmedLine))
                 continue;
 
-            if (trimmedLine.StartsWith('['))
+            // Skip comments that are on their own line
+            if (trimmedLine.StartsWith("#") && !trimmedLine.Contains("[") && !rawLine.Contains("["))
+                continue;
+
+            // Parse route ID and name
+            if (trimmedLine.StartsWith("[") && trimmedLine.Contains("]"))
             {
-                encounter.RouteId = trimmedLine;
+                // Extract route ID (everything between [ and ])
+                var bracketEnd = trimmedLine.IndexOf(']');
+                encounter.RouteId = trimmedLine[..(bracketEnd + 1)];
+
+                // Extract route name (after # if exists)
+                var hashIndex = trimmedLine.IndexOf('#');
+                if (hashIndex > 0 && hashIndex < trimmedLine.Length - 1)
+                {
+                    encounter.RouteName = trimmedLine[(hashIndex + 1)..].Trim();
+                }
+
+                continue;
             }
-            else if (!trimmedLine.StartsWith(' ') && !string.IsNullOrWhiteSpace(trimmedLine))
+
+            // Skip comment lines
+            if (trimmedLine.StartsWith("#"))
+                continue;
+
+            // Check if this is an encounter type line (not starting with a digit and not empty)
+            if (!char.IsDigit(trimmedLine[0]) && !trimmedLine.StartsWith("["))
             {
-                // New wild encounter section
-                if (currentWildEncounter != null && isInsideWildEncounter)
+                // Save previous wild encounter if it exists and has data
+                if (currentWildEncounter != null && currentWildEncounter.EncounterRatios.Count > 0)
                 {
                     encounter.WildEncounters.Add(currentWildEncounter);
                 }
 
+                // Parse encounter type
                 var parts = trimmedLine.Split(',');
-                var typeString = parts.Length > 0 ? parts[0] : trimmedLine;
-                var type = Enum.TryParse<EncounterTypes>(typeString, true, out var parsedType)
-                    ? parsedType
-                    : EncounterTypes.Land;
+                var typeName = parts[0].Trim();
+                var frequency = parts.Length > 1 ? int.Parse(parts[1].Trim()) : 100;
 
                 currentWildEncounter = new WildEncounter
                 {
-                    EncounterType = type,
-                    Frequency = parts.Length > 1 ? int.Parse(parts[1]) : 100,
+                    EncounterType = ParseEncounterType(typeName),
+                    Frequency = frequency,
                     EncounterRatios = []
                 };
-                isInsideWildEncounter = true;
             }
-            else if (trimmedLine.StartsWith(' ') && isInsideWildEncounter)
+            // Parse Pokémon data (starts with digit or has leading space)
+            else if (currentWildEncounter != null)
             {
-                // Encounter ratio line (starts with space)
-                var parts = trimmedLine.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length >= 4)
+                // Remove any leading spaces or tabs
+                var cleanLine = rawLine.TrimStart();
+
+                // Check if this line starts with a number (rate)
+                if (cleanLine.Length <= 0 || !char.IsDigit(cleanLine[0])) continue;
+                
+                var parts = cleanLine.Split(',');
+                if (parts.Length < 4) continue;
+                
+                // Clean each part
+                for (var i = 0; i < parts.Length; i++)
                 {
-                    var encounterRatio = new EncounterRatio
-                    {
-                        Rate = int.Parse(parts[0].Trim()),
-                        Pokemon = new Pokemon { Name = parts[1].Trim() },
-                        Levels = [int.Parse(parts[2].Trim()), int.Parse(parts[3].Trim())]
-                    };
-                    currentWildEncounter?.EncounterRatios.Add(encounterRatio);
+                    parts[i] = parts[i].Trim();
                 }
+
+                if (!int.TryParse(parts[0], out var rate)) continue;
+
+                var pokemonName = parts[1].Trim();
+                var minLevel = int.Parse(parts[2]);
+                var maxLevel = int.Parse(parts[3]);
+
+                var encounterRatio = new EncounterRatio
+                {
+                    Rate = rate,
+                    Pokemon = new Pokemon { Name = pokemonName },
+                    Levels = [minLevel, maxLevel]
+                };
+                currentWildEncounter.EncounterRatios.Add(encounterRatio);
             }
         }
 
         // Add the last wild encounter
-        if (currentWildEncounter != null && isInsideWildEncounter)
+        if (currentWildEncounter != null && currentWildEncounter.EncounterRatios.Count > 0)
         {
             encounter.WildEncounters.Add(currentWildEncounter);
         }
@@ -240,10 +230,26 @@
         return encounter;
     }
 
-    private async Task FilterEncounters()
+    private EncounterTypes ParseEncounterType(string typeString)
     {
-        await ApplyFilter();
-        StateHasChanged();
+        return typeString switch
+        {
+            "Land" or "Grass" => EncounterTypes.Land,
+            "LandNight" => EncounterTypes.LandNight,
+            "LandMorning" => EncounterTypes.LandMorning,
+            "Water" => EncounterTypes.Water,
+            "WaterNight" => EncounterTypes.WaterNight,
+            "Cave" => EncounterTypes.Cave,
+            "CaveNight" => EncounterTypes.CaveNight,
+            "OldRod" => EncounterTypes.OldRod,
+            "GoodRod" => EncounterTypes.GoodRod,
+            "SuperRod" => EncounterTypes.SuperRod,
+            "RockSmash" => EncounterTypes.RockSmash,
+            "HeadbuttLow" => EncounterTypes.HeadbuttLow,
+            "HeadbuttHigh" => EncounterTypes.HeadbuttHigh,
+            "BugContest" => EncounterTypes.BugContest,
+            _ => EncounterTypes.Land
+        };
     }
 
     private async Task ApplyFilter()
@@ -261,8 +267,7 @@
                 .ToList();
         }
 
-        // Load sprites for visible Pokémon
-        await LoadVisiblePokemonSprites();
+        StateHasChanged();
     }
 
     private async Task ClearFilter()
@@ -271,74 +276,35 @@
         await ApplyFilter();
     }
 
-    private async Task LoadVisiblePokemonSprites()
+    // Cache-aware sprite loading
+    private async Task<Pokemon> LoadPokemonSprite(string pokemonName)
     {
-        var allPokemon = _filteredEncounters
-            .SelectMany(e => e.WildEncounters)
-            .SelectMany(w => w.EncounterRatios)
-            .Select(r => r.Pokemon)
-            .DistinctBy(p => p.Name)
-            .Where(p => p.Sprites == null)
-            .ToList();
-
-        foreach (var pokemon in allPokemon)
+        // Check cache first
+        if (_pokemonCache.TryGetValue(pokemonName, out var sprite))
         {
-            try
-            {
-                var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemon.Name);
-                pokemon.Sprites = pokemonData.Sprites;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading {pokemon.Name}: {ex.Message}");
-            }
+            return sprite;
         }
-    }
 
-    private async Task LoadEncounterPokemon(IEnumerable<EncounterRatio> encounterRatios)
-    {
-        foreach (var encounterRatio in encounterRatios)
+        try
         {
-            if (encounterRatio.Pokemon.Sprites == null)
-            {
-                try
-                {
-                    var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(encounterRatio.Pokemon.Name);
-                    encounterRatio.Pokemon = pokemonData;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error loading {encounterRatio.Pokemon.Name}: {ex.Message}");
-                }
-            }
+            var pokemon = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemonName);
+            _pokemonCache[pokemonName] = pokemon;
+            return pokemon;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading {pokemonName}: {ex.Message}");
+            return new Pokemon { Name = pokemonName };
         }
     }
 
     private async void OpenRouteDialog(Encounters encounter)
     {
-        // Load all Pokémon sprites for this route
-        var allPokemon = encounter.WildEncounters
-            .SelectMany(w => w.EncounterRatios)
-            .Select(r => r.Pokemon)
-            .Where(p => p.Sprites == null)
-            .ToList();
-
-        foreach (var pokemon in allPokemon)
-        {
-            try
-            {
-                var pokemonData = await _pokeApiClient.GetResourceAsync<Pokemon>(pokemon.Name);
-                pokemon.Sprites = pokemonData.Sprites;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error loading {pokemon.Name}: {ex.Message}");
-            }
-        }
-
         var parameters = new DialogParameters
         {
-            ["Encounter"] = encounter
+            ["Encounter"] = encounter,
+            ["LoadPokemonSprite"] = new Func<string, Task<Pokemon>>(LoadPokemonSprite),
+            ["PokemonCache"] = _pokemonCache
         };
 
         var options = new DialogOptions
@@ -346,7 +312,7 @@
             CloseButton = true,
             MaxWidth = MaxWidth.Large,
             FullWidth = true,
-            BackdropClick = false
+            CloseOnEscapeKey = true
         };
 
         await DialogService.ShowAsync<RouteDialog>("Route Details", parameters, options);
